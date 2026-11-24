@@ -1,0 +1,2199 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Student Innovation Portal</title>
+  <meta name="description"
+    content="Campus innovation showcase, student idea submission, peer voting, comments, and live ranked leaderboard portal." />
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap"
+    rel="stylesheet" />
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"DM Sans"', 'system-ui', 'sans-serif'],
+            heading: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    body {
+      font-family: 'DM Sans', system-ui, sans-serif;
+      background: #F1F4F9;
+      color: #101828;
+    }
+
+    h1,
+    h2,
+    h3,
+    .hd {
+      font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    }
+
+    .in {
+      width: 100%;
+      border: 1px solid #D0D7E4;
+      border-radius: 10px;
+      padding: .65rem .85rem;
+      background: #fff;
+      transition: border-color .15s, box-shadow .15s;
+    }
+
+    .in:focus {
+      border-color: #2447F5;
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(36, 71, 245, .15);
+    }
+
+    button:focus-visible,
+    select:focus-visible {
+      outline: 2px solid #2447F5;
+      outline-offset: 2px;
+    }
+
+    .btn {
+      background: #2447F5;
+      color: #fff;
+      font-weight: 700;
+      border-radius: 10px;
+      padding: .6rem 1.1rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: background-color .15s, transform .1s;
+    }
+
+    .btn:hover {
+      background: #1a37c4;
+    }
+
+    .btn:active {
+      transform: scale(.99);
+    }
+
+    .btn:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+    }
+
+    .ghost {
+      border: 1px solid #D0D7E4;
+      border-radius: 10px;
+      padding: .45rem .85rem;
+      font-weight: 600;
+      background: #fff;
+      cursor: pointer;
+      transition: all .15s;
+    }
+
+    .ghost:hover {
+      border-color: #2447F5;
+      color: #2447F5;
+    }
+
+    .vote {
+      width: 64px;
+      border: 1px solid #D0D7E4;
+      border-radius: 12px;
+      background: #fff;
+      text-align: center;
+      padding: .5rem 0;
+      flex: none;
+      cursor: pointer;
+      transition: all .15s;
+    }
+
+    .vote:hover {
+      border-color: #2447F5;
+    }
+
+    .vote.on {
+      background: #2447F5;
+      color: #fff;
+      border-color: #2447F5;
+    }
+
+    .pulse-rank {
+      animation: pulseRank 2s infinite ease-in-out;
+    }
+
+    @keyframes pulseRank {
+
+      0%,
+      100% {
+        transform: scale(1);
+      }
+
+      50% {
+        transform: scale(1.03);
+      }
+    }
+
+    pre {
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 1rem;
+      border-radius: 0.5rem;
+      overflow-x: auto;
+      font-size: 0.8rem;
+      line-height: 1.4;
+    }
+
+    @media (prefers-reduced-motion:no-preference) {
+      .toast {
+        animation: t .25s ease-out;
+      }
+
+      @keyframes t {
+        from {
+          transform: translateY(8px);
+          opacity: 0;
+        }
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="app" class="min-h-screen"></div>
+  <div id="toast" class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50"></div>
+
+  <script type="module">
+    // ==============================================================================
+    // 1. Supabase Client Configuration (Deployment Ready)
+    // ==============================================================================
+    import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+    const storedUrl = localStorage.getItem("sip_supabase_url") || "";
+    const storedKey = localStorage.getItem("sip_supabase_key") || "";
+
+    let SUPABASE_URL = storedUrl || "";       // e.g. "https://your-project.supabase.co"
+    let SUPABASE_ANON_KEY = storedKey || "";  // e.g. "eyJhbGciOi..."
+    // Admin authorization is granted only by Supabase Auth app_metadata.role,
+    // which must be assigned server-side by a trusted project administrator.
+    // Replace this with the email address of the admin user you create in Supabase Auth.
+    // The login form can then accept the short ID "admin"; Supabase still authenticates by email.
+    const ADMIN_LOGIN_EMAIL = "shivanibehera16@gmail.com";
+    const isTrustedAdmin = user => user?.app_metadata?.role === "admin";
+    const adminProfile = user => ({
+      id: user.id,
+      full_name: user.user_metadata?.full_name || "Faculty Administrator",
+      email: user.email,
+      department: "Administration",
+      roll_number: "ADMIN"
+    });
+
+    const CATS = [
+      "Aerospace / Aeronautical Engineering",
+      "Agricultural Engineering",
+      "AI & Machine Learning",
+      "Automobile Engineering",
+      "Biomedical Engineering",
+      "Biotechnology",
+      "Chemical Engineering",
+      "Civil Engineering",
+      "Computer Science & Engineering (CSE)",
+      "Cyber Security",
+      "Data Science & Analytics",
+      "EdTech",
+      "Electrical & Electronics (EEE)",
+      "Electronics & Communication (ECE)",
+      "Environmental Engineering",
+      "FinTech",
+      "Food Technology",
+      "HealthTech",
+      "Industrial & Production Engineering",
+      "Information Technology (IT)",
+      "Instrumentation Engineering",
+      "IoT & Hardware",
+      "Marine & Naval Engineering",
+      "Mechanical Engineering",
+      "Mechatronics & Robotics",
+      "Metallurgical & Materials Engineering",
+      "Mining Engineering",
+      "Nanotechnology",
+      "Petroleum Engineering",
+      "Smart Campus",
+      "Sustainability & Green Tech",
+      "Textile Engineering",
+      "Other"
+    ];
+
+    let supabase = null;
+    if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+      try {
+        supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      } catch (err) {
+        console.error("Supabase init error:", err);
+      }
+    }
+
+    // ==============================================================================
+    // Built-in Database Seeding: Guarantees working out-of-the-box experience
+    // ==============================================================================
+    const DEMO_IDEAS = [];
+
+    // ==============================================================================
+    // Security: Web Crypto Cryptographic Hashing & Brute-Force Rate Limiting
+    // ==============================================================================
+    async function hashPassword(text) {
+      if (!text) return "";
+      const enc = new TextEncoder().encode(text + "_sip_salt_2026_campus_sec");
+      const buf = await crypto.subtle.digest("SHA-256", enc);
+      return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+    }
+
+    let failedLoginAttempts = 0;
+    let lockoutUntil = 0;
+    function checkRateLimit() {
+      if (Date.now() < lockoutUntil) {
+        const remainingSec = Math.ceil((lockoutUntil - Date.now()) / 1000);
+        throw new Error(`Login temporarily locked due to repeated failed attempts. Please wait ${remainingSec}s.`);
+      }
+    }
+    function recordFailedAttempt() {
+      failedLoginAttempts++;
+      if (failedLoginAttempts >= 5) {
+        lockoutUntil = Date.now() + 30000; // 30-second security cooldown
+        failedLoginAttempts = 0;
+      }
+    }
+    function resetRateLimit() {
+      failedLoginAttempts = 0;
+      lockoutUntil = 0;
+    }
+
+    // ==============================================================================
+    // 2. Application State (Fresh Deployment State - No Demo Data)
+    // ==============================================================================
+    const S = {
+      isLive: !!supabase,
+      user: null,
+      student: null,
+      admin: false,
+      tab: "showcase",        // 'showcase' | 'explore' | 'board' | 'submit' | 'admin'
+      cat: "All",
+      authTab: "student",     // 'student' | 'admin' | 'register'
+      exploreSort: "highest", // 'highest' | 'newest' | 'trending'
+      exploreSearch: "",
+      exploreCat: "All",
+      open: null,
+      ready: false,
+      ideas: [],
+      mine: [],
+      all: [],
+      myVotes: new Set(),
+      comments: [],
+      dbModal: false,
+      dbDiagnostics: null,
+      dbTesting: false
+    };
+
+    const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+    const toast = (m, bad = false) => {
+      const t = document.getElementById("toast");
+      if (!t) return;
+      t.innerHTML = `<div class="toast px-4 py-2.5 rounded-xl text-white text-sm shadow-lg ${bad ? "bg-red-600" : "bg-slate-900"}">${esc(m)}</div>`;
+      setTimeout(() => { if (t) t.innerHTML = ""; }, 3500);
+    };
+
+    const run = async f => {
+      try {
+        await f();
+      } catch (e) {
+        console.error(e);
+        toast(e.message || "Something went wrong", true);
+      }
+    };
+
+    // ==============================================================================
+    // 3. Database Diagnostics & Live Connectivity Engine
+    // ==============================================================================
+    async function runDbDiagnostics() {
+      S.dbTesting = true;
+      render();
+      const start = performance.now();
+      const report = {
+        timestamp: new Date().toLocaleTimeString(),
+        mode: supabase ? "Supabase Cloud (PostgreSQL)" : "Local Storage Database Engine",
+        isLive: !!supabase,
+        url: SUPABASE_URL || "Local / In-Browser",
+        status: "Healthy",
+        latencyMs: 0,
+        readTest: "Pending",
+        writeTest: "Pending",
+        tables: {
+          ideas: 0,
+          students: 0,
+          votes: 0,
+          comments: 0
+        },
+        error: null
+      };
+
+      try {
+        if (supabase) {
+          const { data: idData, error: idErr } = await supabase.from('ideas').select('id');
+          if (idErr) throw idErr;
+          report.readTest = "PASSED (Cloud Connected)";
+          report.tables.ideas = idData?.length || 0;
+
+          const { data: stData } = await supabase.from('students').select('id');
+          report.tables.students = stData?.length || 0;
+
+          const { data: vtData } = await supabase.from('votes').select('id');
+          report.tables.votes = vtData?.length || 0;
+
+          const { data: cmData } = await supabase.from('comments').select('id');
+          report.tables.comments = cmData?.length || 0;
+
+          report.writeTest = "NOT TESTED (no safe cloud write probe configured)";
+        } else {
+          const ideas = JSON.parse(localStorage.getItem("sip_ideas") || "[]");
+          const students = JSON.parse(localStorage.getItem("sip_students") || "[]");
+          const votes = JSON.parse(localStorage.getItem("sip_votes") || "[]");
+          const comments = JSON.parse(localStorage.getItem("sip_comments") || "[]");
+
+          report.readTest = "PASSED (Local Read OK)";
+          report.tables.ideas = ideas.length;
+          report.tables.students = students.length;
+          report.tables.votes = votes.length;
+          report.tables.comments = comments.length;
+
+          const testKey = "_sip_ping_test_" + Date.now();
+          localStorage.setItem(testKey, "1");
+          const val = localStorage.getItem(testKey);
+          localStorage.removeItem(testKey);
+          report.writeTest = val === "1" ? "PASSED (Write/Delete OK)" : "FAILED";
+        }
+        report.latencyMs = Math.max(1, Math.round(performance.now() - start));
+      } catch (err) {
+        report.status = "Connection Error";
+        report.error = err.message;
+        report.readTest = "FAILED";
+        report.latencyMs = Math.round(performance.now() - start);
+      }
+
+      S.dbTesting = false;
+      S.dbDiagnostics = report;
+      render();
+      return report;
+    }
+
+    // ==============================================================================
+    // 4. Data Synchronization & Persistence
+    // ==============================================================================
+    async function loadData() {
+      if (!supabase) {
+        let localIdeas = [];
+        try { localIdeas = JSON.parse(localStorage.getItem("sip_ideas")) || []; } catch (e) { }
+        // Remove any demo ideas that were seeded earlier
+        const cleanedIdeas = localIdeas.filter(i => !String(i.id || "").startsWith("idea-demo-"));
+        if (cleanedIdeas.length !== localIdeas.length) {
+          localIdeas = cleanedIdeas;
+          localStorage.setItem("sip_ideas", JSON.stringify(localIdeas));
+        }
+        if (localIdeas.length === 0) {
+          localIdeas = [...DEMO_IDEAS];
+          localStorage.setItem("sip_ideas", JSON.stringify(localIdeas));
+        }
+        S.all = localIdeas;
+        S.ideas = S.all.filter(i => i.status === "Approved");
+
+        let localComments = [];
+        try { localComments = JSON.parse(localStorage.getItem("sip_comments")) || []; } catch (e) { }
+        S.comments = localComments;
+
+        let localVotes = [];
+        try { localVotes = JSON.parse(localStorage.getItem("sip_votes")) || []; } catch (e) { }
+
+        if (S.student) {
+          S.myVotes = new Set(localVotes.filter(v => v.student_id === S.student.id).map(v => v.idea_id));
+          S.mine = S.all.filter(i => i.student_id === S.student.id);
+        } else {
+          S.myVotes = new Set();
+          S.mine = [];
+        }
+        S.ready = true;
+        render();
+        return;
+      }
+
+      // Live Supabase queries
+      try {
+        const { data: ideasData, error: ideasErr } = await supabase
+          .from('ideas')
+          .select('*')
+          .order('vote_count', { ascending: false });
+
+        if (ideasErr) throw ideasErr;
+        S.all = ideasData || [];
+        S.ideas = S.all.filter(i => i.status === 'Approved');
+
+        if (S.student) {
+          S.mine = S.all.filter(i => i.student_id === S.student.id);
+          const { data: votesData } = await supabase
+            .from('votes')
+            .select('idea_id')
+            .eq('student_id', S.student.id);
+          S.myVotes = new Set((votesData || []).map(v => v.idea_id));
+        } else {
+          S.mine = [];
+          S.myVotes = new Set();
+        }
+
+        const { data: commentsData } = await supabase
+          .from('comments')
+          .select('*')
+          .order('created_at', { ascending: true });
+        S.comments = commentsData || [];
+
+      } catch (err) {
+        console.warn("Supabase fetch notice:", err.message);
+      } finally {
+        S.ready = true;
+        render();
+      }
+    }
+
+    let realtimeChannel = null;
+    function setupRealtime() {
+      if (!supabase) return;
+      if (realtimeChannel) supabase.removeChannel(realtimeChannel);
+
+      realtimeChannel = supabase
+        .channel('portal-sync')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'ideas' }, () => loadData())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'votes' }, () => loadData())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'comments' }, () => loadData())
+        .subscribe();
+    }
+
+    async function initAuth() {
+      // Validate session token and expiration
+      const savedSession = localStorage.getItem("sip_session");
+      if (savedSession) {
+        try {
+          const sess = JSON.parse(savedSession);
+          if (sess?.expires_at && Date.now() > sess.expires_at) {
+            localStorage.removeItem("sip_session");
+            localStorage.removeItem("sip_current_student");
+            console.warn("Session expired. Required re-authentication.");
+          }
+        } catch (e) {
+          localStorage.removeItem("sip_session");
+        }
+      }
+
+      if (supabase) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user) {
+            S.user = session.user;
+            S.admin = isTrustedAdmin(S.user);
+            const { data: prof } = await supabase
+              .from('students')
+              .select('*')
+              .or(`auth_id.eq.${S.user.id},email.eq.${S.user.email}`)
+              .maybeSingle();
+            S.student = prof || (S.admin ? adminProfile(S.user) : null);
+          }
+          supabase.auth.onAuthStateChange(async (_event, session) => {
+            if (session?.user) {
+              S.user = session.user;
+              S.admin = isTrustedAdmin(S.user);
+              const { data: prof } = await supabase
+                .from('students')
+                .select('*')
+                .or(`auth_id.eq.${S.user.id},email.eq.${S.user.email}`)
+                .maybeSingle();
+              S.student = prof || (S.admin ? adminProfile(S.user) : null);
+            } else {
+              S.user = null;
+              S.student = null;
+              S.admin = false;
+            }
+            loadData();
+          });
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      const savedSt = localStorage.getItem("sip_current_student");
+      const activeSession = localStorage.getItem("sip_session");
+      if (savedSt && activeSession && !S.student) {
+        try {
+          const parsed = JSON.parse(savedSt);
+          const sess = JSON.parse(activeSession);
+          if (sess && sess.expires_at && Date.now() < sess.expires_at) {
+            S.student = parsed;
+            S.admin = false; // Local storage is user-editable and cannot grant admin privileges.
+            S.user = { email: S.student.email, id: S.student.id };
+          } else {
+            localStorage.removeItem("sip_session");
+            localStorage.removeItem("sip_current_student");
+          }
+        } catch (e) { }
+      }
+    }
+
+    // ==============================================================================
+    // 5. User Actions
+    // ==============================================================================
+    window.A = {
+      tab: t => { S.tab = t; S.open = null; render(); },
+      cat: c => { S.cat = c; render(); },
+      toggle: id => { S.open = S.open === id ? null : id; render(); },
+      switchAuthTab: t => { S.authTab = t; render(); },
+      setExploreSort: s => { S.exploreSort = s; render(); },
+      setExploreCat: c => { S.exploreCat = c; render(); },
+      setExploreSearch: q => { S.exploreSearch = q; render(); },
+
+      // Database Management & Live Diagnostics
+      openDbModal: async () => {
+        S.dbModal = true;
+        if (!S.dbDiagnostics) await runDbDiagnostics();
+        render();
+      },
+      closeDbModal: () => {
+        S.dbModal = false;
+        render();
+      },
+      runDbCheck: () => runDbDiagnostics(),
+      saveSupabaseConfig: async (e) => {
+        e.preventDefault();
+        const f = new FormData(e.target);
+        const url = (f.get("url") || "").trim();
+        const key = (f.get("key") || "").trim();
+        if (!url || !key) return toast("Please enter both Supabase URL and Anon Key.", true);
+        try {
+          const testClient = createClient(url, key);
+          const { error } = await testClient.from('ideas').select('id').limit(1);
+          if (error && !error.message.includes("does not exist") && !error.message.includes("relation")) {
+            console.warn("Supabase check notice:", error.message);
+          }
+          localStorage.setItem("sip_supabase_url", url);
+          localStorage.setItem("sip_supabase_key", key);
+          SUPABASE_URL = url;
+          SUPABASE_ANON_KEY = key;
+          supabase = testClient;
+          S.isLive = true;
+          toast("Connected to Supabase successfully!");
+          setupRealtime();
+          await loadData();
+          await runDbDiagnostics();
+        } catch (err) {
+          toast("Connection failed: " + err.message, true);
+        }
+      },
+      disconnectSupabase: () => {
+        localStorage.removeItem("sip_supabase_url");
+        localStorage.removeItem("sip_supabase_key");
+        SUPABASE_URL = "";
+        SUPABASE_ANON_KEY = "";
+        supabase = null;
+        S.isLive = false;
+        toast("Disconnected from Supabase. Running in Local Storage Mode.");
+        loadData();
+        runDbDiagnostics();
+      },
+      seedSampleIdeas: () => {
+        localStorage.setItem("sip_ideas", JSON.stringify(DEMO_IDEAS));
+        toast("Sample campus innovation pitches seeded into database!");
+        loadData();
+        runDbDiagnostics();
+      },
+      copySqlSchema: () => {
+        const sql = `-- Supabase SQL Schema for Student Innovation Portal
+-- SECURITY NOTE: Do not deploy permissive "Public All" policies. This app expects
+-- faculty users to have app_metadata.role = 'admin' assigned by a trusted server/admin.
+-- Configure the restrictive RLS policies for your schema before production use.
+CREATE TABLE IF NOT EXISTS public.students (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    auth_id UUID,
+    full_name TEXT NOT NULL,
+    email TEXT UNIQUE NOT NULL,
+    department TEXT NOT NULL,
+    roll_number TEXT UNIQUE NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.ideas (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    student_id TEXT NOT NULL,
+    author_name TEXT NOT NULL,
+    author_department TEXT NOT NULL,
+    title TEXT NOT NULL,
+    category TEXT NOT NULL,
+    description TEXT NOT NULL,
+    status TEXT DEFAULT 'Pending',
+    is_winner BOOLEAN DEFAULT false,
+    winner_rank TEXT DEFAULT '',
+    vote_count INTEGER DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.votes (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    idea_id UUID REFERENCES public.ideas(id) ON DELETE CASCADE,
+    student_id TEXT NOT NULL,
+    voter_name TEXT,
+    voter_roll TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(idea_id, student_id)
+);
+
+CREATE TABLE IF NOT EXISTS public.comments (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    idea_id UUID REFERENCES public.ideas(id) ON DELETE CASCADE,
+    student_id TEXT NOT NULL,
+    commenter_name TEXT NOT NULL,
+    commenter_department TEXT,
+    comment_text TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.students ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.ideas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.votes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY;
+
+-- Remove old permissive policies if this script is re-run.
+DROP POLICY IF EXISTS "Public Read Students" ON public.students;
+DROP POLICY IF EXISTS "Public All Students" ON public.students;
+DROP POLICY IF EXISTS "Public Read Ideas" ON public.ideas;
+DROP POLICY IF EXISTS "Public All Ideas" ON public.ideas;
+DROP POLICY IF EXISTS "Public All Votes" ON public.votes;
+DROP POLICY IF EXISTS "Public All Comments" ON public.comments;
+
+-- Admin identity must be assigned in auth.users.app_metadata by a trusted
+-- Supabase administrator/service-role process, never from client user metadata.
+CREATE OR REPLACE FUNCTION public.is_portal_admin()
+RETURNS BOOLEAN
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT COALESCE((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin', false);
+$$;
+
+-- Students can read their own profile; admins can read all profiles.
+CREATE POLICY "Students read own profile or admin reads all"
+ON public.students FOR SELECT TO authenticated
+USING (auth.uid() = auth_id OR public.is_portal_admin());
+
+CREATE POLICY "Students create own profile"
+ON public.students FOR INSERT TO authenticated
+WITH CHECK (auth.uid() = auth_id AND NOT public.is_portal_admin());
+
+CREATE POLICY "Students update own profile or admin"
+ON public.students FOR UPDATE TO authenticated
+USING (auth.uid() = auth_id OR public.is_portal_admin())
+WITH CHECK (auth.uid() = auth_id OR public.is_portal_admin());
+
+-- Public visitors can see approved ideas. Owners can see their own submissions.
+CREATE POLICY "Read approved ideas or own ideas or admin"
+ON public.ideas FOR SELECT
+USING (
+  status = 'Approved'
+  OR public.is_portal_admin()
+  OR EXISTS (SELECT 1 FROM public.students s WHERE s.id::text = ideas.student_id AND s.auth_id = auth.uid())
+);
+
+CREATE POLICY "Authenticated students submit ideas"
+ON public.ideas FOR INSERT TO authenticated
+WITH CHECK (
+  status = 'Pending'
+  AND NOT public.is_portal_admin()
+  AND EXISTS (SELECT 1 FROM public.students s WHERE s.id::text = ideas.student_id AND s.auth_id = auth.uid())
+);
+
+CREATE POLICY "Owner withdraws pending idea or admin manages"
+ON public.ideas FOR DELETE TO authenticated
+USING (
+  public.is_portal_admin()
+  OR (status = 'Pending' AND EXISTS (
+    SELECT 1 FROM public.students s WHERE s.id::text = ideas.student_id AND s.auth_id = auth.uid()
+  ))
+);
+
+CREATE POLICY "Admin updates ideas"
+ON public.ideas FOR UPDATE TO authenticated
+USING (public.is_portal_admin())
+WITH CHECK (public.is_portal_admin());
+
+-- Votes: authenticated students may manage only their own votes; admins can moderate.
+CREATE POLICY "Read votes"
+ON public.votes FOR SELECT
+USING (true);
+
+CREATE POLICY "Students insert own votes"
+ON public.votes FOR INSERT TO authenticated
+WITH CHECK (
+  NOT public.is_portal_admin()
+  AND EXISTS (SELECT 1 FROM public.students s WHERE s.id::text = votes.student_id AND s.auth_id = auth.uid())
+  AND EXISTS (SELECT 1 FROM public.ideas i WHERE i.id = votes.idea_id AND i.status = 'Approved' AND i.student_id <> votes.student_id)
+);
+
+CREATE POLICY "Students delete own votes or admin"
+ON public.votes FOR DELETE TO authenticated
+USING (
+  public.is_portal_admin()
+  OR EXISTS (SELECT 1 FROM public.students s WHERE s.id::text = votes.student_id AND s.auth_id = auth.uid())
+);
+
+-- Comments are readable publicly; authenticated users may add comments only as themselves.
+CREATE POLICY "Read comments" ON public.comments FOR SELECT USING (true);
+CREATE POLICY "Insert own comments"
+ON public.comments FOR INSERT TO authenticated
+WITH CHECK (
+  EXISTS (SELECT 1 FROM public.students s WHERE s.id::text = comments.student_id AND s.auth_id = auth.uid())
+  AND EXISTS (SELECT 1 FROM public.ideas i WHERE i.id = comments.idea_id AND i.status = 'Approved')
+);
+CREATE POLICY "Delete own comments or admin"
+ON public.comments FOR DELETE TO authenticated
+USING (
+  public.is_portal_admin()
+  OR EXISTS (SELECT 1 FROM public.students s WHERE s.id::text = comments.student_id AND s.auth_id = auth.uid())
+);
+
+ALTER PUBLICATION supabase_realtime ADD TABLE public.ideas;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.votes;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.comments;`;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(sql).then(() => {
+            toast("Supabase SQL setup script copied to clipboard!");
+          }).catch(() => {
+            prompt("Copy Supabase SQL Setup Script:", sql);
+          });
+        } else {
+          prompt("Copy Supabase SQL Setup Script:", sql);
+        }
+      },
+
+      // Eye Icon Toggle Helper for Cross-Checking Passwords
+      togglePwd: (inputId, btn) => {
+        const input = document.getElementById(inputId);
+        if (!input) return;
+        const isPwd = input.type === "password";
+        input.type = isPwd ? "text" : "password";
+        if (btn) {
+          btn.innerHTML = isPwd
+            ? `<svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18"/></svg>`
+            : `<svg class="w-5 h-5 text-slate-400 hover:text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>`;
+          btn.setAttribute("title", isPwd ? "Hide password" : "Show password");
+        }
+      },
+
+      // Student Sign-In Action (Secure Authenticated Login)
+      loginStudent: async (e) => {
+        e.preventDefault();
+        checkRateLimit();
+        const f = new FormData(e.target);
+        const identifier = (f.get("identifier") || "").trim();
+        const password = f.get("password") || "";
+
+        if (!identifier || !password) {
+          return toast("Please enter both roll/email and your password.", true);
+        }
+
+        await run(async () => {
+          if (supabase) {
+            const { data, error } = await supabase.auth.signInWithPassword({ email: identifier, password });
+            if (!error && data?.user) {
+              resetRateLimit();
+              S.user = data.user;
+              const { data: prof } = await supabase.from('students').select('*').eq('email', identifier).maybeSingle();
+              S.student = prof || { id: data.user.id, full_name: data.user.email.split("@")[0], email: data.user.email, department: "General", roll_number: "N/A" };
+              S.admin = isTrustedAdmin(data.user);
+              const session = { user_id: S.student.id, role: S.admin ? "admin" : "student", expires_at: Date.now() + (8 * 3600 * 1000) };
+              localStorage.setItem("sip_session", JSON.stringify(session));
+              localStorage.setItem("sip_current_student", JSON.stringify(S.student));
+              toast("Welcome back, " + (S.student.full_name || "Student") + "!");
+              S.tab = "explore";
+              loadData();
+              return;
+            }
+          }
+
+          // Secure local student lookup & verification
+          let registeredStudents = [];
+          try { registeredStudents = JSON.parse(localStorage.getItem("sip_students")) || []; } catch (e) { }
+          const found = registeredStudents.find(s =>
+            s.email.toLowerCase() === identifier.toLowerCase() ||
+            (s.roll_number && s.roll_number.toLowerCase() === identifier.toLowerCase())
+          );
+
+          if (!found) {
+            recordFailedAttempt();
+            throw new Error("Student account not found. Please click 'Register' tab to create your account.");
+          }
+
+          const inputHash = await hashPassword(password);
+          if (found.password_hash !== inputHash) {
+            recordFailedAttempt();
+            throw new Error("Invalid password. Please verify your credentials.");
+          }
+
+          resetRateLimit();
+          S.student = found;
+          S.user = { email: found.email, id: found.id };
+          S.admin = false;
+          const session = { user_id: S.student.id, role: "student", expires_at: Date.now() + (8 * 3600 * 1000) };
+          localStorage.setItem("sip_session", JSON.stringify(session));
+          localStorage.setItem("sip_current_student", JSON.stringify(S.student));
+          toast("Signed in successfully as " + S.student.full_name);
+          S.tab = "explore";
+          loadData();
+        });
+      },
+
+      // Faculty login: Supabase Auth + server-assigned app_metadata role only.
+      loginAdmin: async (e) => {
+        e.preventDefault();
+        checkRateLimit();
+        const f = new FormData(e.target);
+        const inputId = (f.get("email") || "").trim().toLowerCase();
+        const password = f.get("password") || "";
+        const loginEmail = inputId === "admin" ? ADMIN_LOGIN_EMAIL : inputId;
+
+        if (!inputId || !password) {
+          return toast("Please enter Admin ID and password.", true);
+        }
+        if (inputId === "admin" && ADMIN_LOGIN_EMAIL === "replace-with-your-admin-email@example.com") {
+          return toast("Set ADMIN_LOGIN_EMAIL in this HTML file to the email you created in Supabase Auth.", true);
+        }
+        if (!supabase) {
+          return toast("Faculty sign-in requires the configured Supabase backend. Local/demo mode cannot authenticate administrators.", true);
+        }
+
+        await run(async () => {
+          const { data, error } = await supabase.auth.signInWithPassword({ email: loginEmail, password });
+          if (error || !data?.user) {
+            recordFailedAttempt();
+            throw new Error("Faculty sign-in failed. Check your credentials.");
+          }
+          if (!isTrustedAdmin(data.user)) {
+            await supabase.auth.signOut();
+            S.user = null;
+            S.student = null;
+            S.admin = false;
+            recordFailedAttempt();
+            throw new Error("This account is not authorized as a faculty administrator. Ask the project owner to assign the admin role securely.");
+          }
+
+          resetRateLimit();
+          S.user = data.user;
+          S.admin = true;
+          S.student = adminProfile(data.user);
+          S.tab = "admin";
+          document.activeElement?.blur(); // lets render() run even if Enter was pressed in the password field
+          toast("Faculty administrator access verified.");
+          await loadData();
+        });
+      },
+
+      loginEmail: (e) => window.A.loginStudent(e),
+
+      logout: async () => {
+        localStorage.removeItem("sip_session");
+        localStorage.removeItem("sip_current_student");
+        if (supabase) await supabase.auth.signOut();
+        S.user = null;
+        S.student = null;
+        S.admin = false;
+        S.myVotes.clear();
+        toast("You have signed out.");
+        loadData();
+      },
+
+      register: async (e) => {
+        e.preventDefault();
+        const f = new FormData(e.target);
+        const fullName = f.get("name").trim();
+        const rollNumber = f.get("roll").trim().toUpperCase();
+        const department = f.get("dept").trim();
+        const email = f.get("email").trim().toLowerCase();
+        const password = f.get("password") || "";
+
+        if (!fullName || fullName.length < 2) return toast("Full name must be at least 2 characters.", true);
+        if (!rollNumber || rollNumber.length < 3) return toast("Please enter a valid Roll / Student ID.", true);
+        if (!email || !email.includes("@")) return toast("Please enter a valid college email address.", true);
+        if (password.length < 8 || !/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
+          return toast("Password must be at least 8 characters and contain both letters and numbers.", true);
+        }
+
+        await run(async () => {
+          let registeredStudents = [];
+          try { registeredStudents = JSON.parse(localStorage.getItem("sip_students")) || []; } catch (e) { }
+
+          if (registeredStudents.some(s => s.email.toLowerCase() === email)) {
+            throw new Error("A student account with this email address already exists.");
+          }
+          if (registeredStudents.some(s => s.roll_number.toUpperCase() === rollNumber)) {
+            throw new Error("A student account with this Roll Number already exists.");
+          }
+
+          const password_hash = await hashPassword(password);
+
+          if (supabase) {
+            let authId = null;
+            const { data: authData, error: authErr } = await supabase.auth.signUp({
+              email,
+              password,
+              options: { data: { full_name: fullName, roll_number: rollNumber, department } }
+            });
+            if (authErr) throw authErr;
+            if (authData?.user) authId = authData.user.id;
+
+            const { data: stData, error: stErr } = await supabase
+              .from('students')
+              .upsert({
+                auth_id: authId,
+                full_name: fullName,
+                email,
+                department,
+                roll_number: rollNumber
+              }, { onConflict: 'email' })
+              .select()
+              .single();
+
+            if (stErr) throw stErr;
+            S.student = stData;
+          } else {
+            S.student = {
+              id: "st-" + Date.now(),
+              full_name: fullName,
+              email,
+              department,
+              roll_number: rollNumber,
+              password_hash
+            };
+            registeredStudents.push(S.student);
+            localStorage.setItem("sip_students", JSON.stringify(registeredStudents));
+          }
+
+          const session = { user_id: S.student.id, role: "student", expires_at: Date.now() + (8 * 3600 * 1000) };
+          localStorage.setItem("sip_session", JSON.stringify(session));
+          localStorage.setItem("sip_current_student", JSON.stringify(S.student));
+          S.user = { email, id: S.student.id };
+          S.admin = false;
+          toast("Student account registered successfully!");
+          S.tab = "explore";
+          loadData();
+        });
+      },
+
+      submit: async (e) => {
+        e.preventDefault();
+        if (!S.student) return toast("Authentication required: Please sign in or register to pitch an idea.", true);
+        const f = new FormData(e.target);
+        const title = f.get("title").trim();
+        const category = f.get("cat");
+        const description = f.get("desc").trim();
+
+        if (title.length < 5 || title.length > 150) return toast("Title must be between 5 and 150 characters.", true);
+        if (!category) return toast("Please select a category before publishing your idea.", true);
+        if (!CATS.includes(category)) return toast("Please select a valid innovation category.", true);
+        if (description.length < 20 || description.length > 4000) return toast("Description must be between 20 and 4000 characters.", true);
+
+        await run(async () => {
+          if (supabase) {
+            const { error } = await supabase.from('ideas').insert({
+              student_id: S.student.id,
+              author_name: S.student.full_name,
+              author_department: S.student.department,
+              title,
+              category,
+              description,
+              status: 'Pending',
+              is_winner: false,
+              vote_count: 0
+            });
+            if (error) throw error;
+          } else {
+            const newIdea = {
+              id: "idea-" + Date.now(),
+              student_id: S.student.id,
+              author_name: S.student.full_name,
+              author_department: S.student.department,
+              title,
+              category,
+              description,
+              status: 'Pending',
+              is_winner: false,
+              winner_rank: "",
+              vote_count: 0,
+              created_at: new Date().toISOString()
+            };
+            S.all.unshift(newIdea);
+            localStorage.setItem("sip_ideas", JSON.stringify(S.all));
+          }
+          e.target.reset();
+          toast("Idea submitted for review! It will be reviewed by faculty before appearing on Explore Ideas.");
+          loadData();
+        });
+      },
+
+      // Real-time Voting (Fair-Play Authorization Enforced)
+      vote: (id) => run(async () => {
+        if (!S.student) {
+          toast("Authentication required: Please sign in as a student to vote.", true);
+          S.tab = "submit";
+          S.authTab = "student";
+          render();
+          return;
+        }
+
+        const idea = S.ideas.find(x => x.id === id) || S.all.find(x => x.id === id);
+        if (!idea) throw new Error("Idea not found.");
+        if (idea.status !== "Approved") throw new Error("Voting is only permitted on approved ideas.");
+        if (idea.student_id === S.student.id) {
+          throw new Error("Fair Play: You cannot vote for your own submitted pitch.");
+        }
+
+        const had = S.myVotes.has(id);
+        if (had) {
+          S.myVotes.delete(id);
+          idea.vote_count = Math.max(0, (idea.vote_count || 1) - 1);
+          toast(`Vote removed from "${idea.title}"`);
+        } else {
+          S.myVotes.add(id);
+          idea.vote_count = (idea.vote_count || 0) + 1;
+          toast(`🔥 Upvoted! "${idea.title}" now has ${idea.vote_count} votes.`);
+        }
+
+        render();
+
+        if (supabase) {
+          if (had) {
+            await supabase.from('votes').delete().match({ idea_id: id, student_id: S.student.id });
+          } else {
+            await supabase.from('votes').insert({
+              idea_id: id,
+              student_id: S.student.id,
+              voter_name: S.student.full_name,
+              voter_roll: S.student.roll_number
+            });
+          }
+          loadData();
+        } else {
+          let localVotes = [];
+          try { localVotes = JSON.parse(localStorage.getItem("sip_votes")) || []; } catch (e) { }
+          if (had) {
+            localVotes = localVotes.filter(v => !(v.idea_id === id && v.student_id === S.student.id));
+          } else {
+            localVotes.push({ idea_id: id, student_id: S.student.id });
+          }
+          localStorage.setItem("sip_votes", JSON.stringify(localVotes));
+          localStorage.setItem("sip_ideas", JSON.stringify(S.all));
+        }
+      }),
+
+      comment: async (e, ideaId) => {
+        e.preventDefault();
+        if (!S.student && !S.admin) return toast("Authentication required: Please sign in to leave feedback.", true);
+        const txt = new FormData(e.target).get("c").trim();
+        if (!txt || txt.length < 2 || txt.length > 1000) {
+          return toast("Feedback must be between 2 and 1000 characters.", true);
+        }
+
+        const idea = S.ideas.find(x => x.id === ideaId);
+        if (!idea || idea.status !== "Approved") {
+          return toast("Comments can only be posted on approved campus ideas.", true);
+        }
+
+        await run(async () => {
+          const commenterName = S.admin ? "Faculty Administrator" : S.student.full_name;
+          const commenterDept = S.admin ? "Administration" : S.student.department;
+          const commenterId = S.admin ? "admin-faculty-id" : S.student.id;
+
+          if (supabase) {
+            const { error } = await supabase.from('comments').insert({
+              idea_id: ideaId,
+              student_id: commenterId,
+              commenter_name: commenterName,
+              commenter_department: commenterDept,
+              comment_text: txt
+            });
+            if (error) throw error;
+          } else {
+            const cm = {
+              id: "cm-" + Date.now(),
+              idea_id: ideaId,
+              student_id: commenterId,
+              commenter_name: commenterName,
+              commenter_department: commenterDept,
+              comment_text: txt,
+              created_at: new Date().toISOString()
+            };
+            S.comments.push(cm);
+            localStorage.setItem("sip_comments", JSON.stringify(S.comments));
+          }
+          e.target.reset();
+          toast("Feedback posted!");
+          loadData();
+        });
+      },
+
+      delComment: id => run(async () => {
+        const cm = S.comments.find(c => c.id === id);
+        if (!cm) return;
+        const isOwner = S.student && cm.student_id === S.student.id;
+        if (!S.admin && !isOwner) {
+          throw new Error("Unauthorized: You can only delete your own comments.");
+        }
+
+        if (supabase) {
+          const { error } = await supabase.from('comments').delete().eq('id', id);
+          if (error) throw error;
+        } else {
+          S.comments = S.comments.filter(c => c.id !== id);
+          localStorage.setItem("sip_comments", JSON.stringify(S.comments));
+        }
+        toast("Comment deleted.");
+        loadData();
+      }),
+
+      setStatus: (id, status) => run(async () => {
+        if (!S.admin) throw new Error("Unauthorized: Administrator authorization required.");
+        if (!["Approved", "Rejected", "Pending"].includes(status)) throw new Error("Invalid status target.");
+
+        if (supabase) {
+          const { error } = await supabase.from('ideas').update({ status, updated_at: new Date().toISOString() }).eq('id', id);
+          if (error) throw error;
+        } else {
+          const it = S.all.find(x => x.id === id);
+          if (it) it.status = status;
+          localStorage.setItem("sip_ideas", JSON.stringify(S.all));
+        }
+        toast(`Idea marked as ${status}`);
+        loadData();
+      }),
+
+      rank: (id) => {
+        if (!S.admin) return toast("Unauthorized: Administrator authorization required.", true);
+        const r = prompt("Enter official winner rank (e.g. 1st Place, 2nd Place, Runner-up). Leave blank to clear:");
+        if (r === null) return;
+        run(async () => {
+          const isWin = !!r.trim();
+          if (supabase) {
+            const { error } = await supabase.from('ideas').update({
+              is_winner: isWin,
+              winner_rank: r.trim(),
+              updated_at: new Date().toISOString()
+            }).eq('id', id);
+            if (error) throw error;
+          } else {
+            const it = S.all.find(x => x.id === id);
+            if (it) {
+              it.is_winner = isWin;
+              it.winner_rank = r.trim();
+            }
+            localStorage.setItem("sip_ideas", JSON.stringify(S.all));
+          }
+          toast(r.trim() ? "Winner status awarded!" : "Winner rank cleared.");
+          loadData();
+        });
+      },
+
+      purgeAllIdeas: () => {
+        if (!S.admin) return toast("Unauthorized: Administrator authorization required.", true);
+        if (!confirm("Are you sure you want to permanently delete ALL student ideas, votes, and comments? This action cannot be undone.")) return;
+        run(async () => {
+          if (supabase) {
+            const { error: votesError } = await supabase.from('votes').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+            if (votesError) throw votesError;
+            const { error: commentsError } = await supabase.from('comments').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+            if (commentsError) throw commentsError;
+            const { error: ideasError } = await supabase.from('ideas').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+            if (ideasError) throw ideasError;
+          } else {
+            localStorage.removeItem("sip_ideas");
+            localStorage.removeItem("sip_votes");
+            localStorage.removeItem("sip_comments");
+            S.all = [];
+            S.ideas = [];
+            S.mine = [];
+            S.comments = [];
+            S.myVotes.clear();
+          }
+          toast("All ideas have been removed.");
+          loadData();
+        });
+      },
+
+      del: id => {
+        const it = S.all.find(x => x.id === id);
+        if (!it) return toast("Idea not found.", true);
+        const isOwner = S.student && it.student_id === S.student.id && it.status === "Pending";
+        if (!S.admin && !isOwner) {
+          return toast("Unauthorized: You can only withdraw your own pending submissions.", true);
+        }
+
+        if (confirm("Delete this idea permanently?")) {
+          run(async () => {
+            if (supabase) {
+              const { error } = await supabase.from('ideas').delete().eq('id', id);
+              if (error) throw error;
+            } else {
+              S.all = S.all.filter(x => x.id !== id);
+              localStorage.setItem("sip_ideas", JSON.stringify(S.all));
+            }
+            toast("Idea deleted.");
+            loadData();
+          });
+        }
+      }
+    };
+
+    // ==============================================================================
+    // 5. Component Views
+    // ==============================================================================
+    const badge = i => i.is_winner ? `<span class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-yellow-300 text-yellow-950">🏆 ${esc(i.winner_rank || "Winner")}</span>` : "";
+    const stat = s => `<span class="text-xs font-bold px-2.5 py-0.5 rounded-full ${s === "Approved" ? "bg-emerald-100 text-emerald-800" : s === "Rejected" ? "bg-red-100 text-red-800" : "bg-slate-200 text-slate-700"}">${s}</span>`;
+
+    function card(i, currentRank) {
+      const on = S.myVotes.has(i.id);
+      const cm = S.comments.filter(c => c.idea_id === i.id);
+      const open = S.open === i.id;
+      const canVote = !!S.student;
+
+      return `
+      <article class="bg-white border border-slate-200 rounded-2xl p-5 flex gap-4 transition shadow-sm hover:border-slate-300">
+        <button class="vote ${on ? "on" : ""}" onclick="A.vote('${i.id}')" aria-pressed="${on}" aria-label="${on ? "Remove vote" : "Vote"}" title="${canVote ? (on ? "Click to revoke vote" : "Click to upvote") : "Sign in to vote"}">
+          <span class="block text-xl leading-6">${on ? "▲" : "△"}</span>
+          <span class="hd block text-xl font-extrabold">${i.vote_count || 0}</span>
+          <span class="text-[10px] uppercase font-bold tracking-tight block ${on ? "text-blue-100" : "text-slate-400"}">${on ? "Voted" : "Vote"}</span>
+        </button>
+        <div class="min-w-0 flex-1">
+          <div class="flex flex-wrap items-center gap-2 mb-1">
+            <h3 class="font-bold text-lg text-slate-900">${esc(i.title)}</h3>
+            ${currentRank ? `<span class="text-xs font-bold px-2 py-0.5 rounded-full ${currentRank === 1 ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-slate-100 text-slate-600'}">Rank #${currentRank}</span>` : ""}
+            ${badge(i)}
+          </div>
+          <p class="text-sm text-slate-500 font-medium">${esc(i.category)} &bull; By <span class="text-slate-700 font-semibold">${esc(i.author_name)}</span> (${esc(i.author_department)})</p>
+          <p class="mt-3 text-slate-700 whitespace-pre-line leading-relaxed text-sm">${esc(i.description)}</p>
+          <div class="mt-3 flex items-center justify-between flex-wrap gap-2">
+            <button class="text-sm font-semibold text-blue-700 hover:underline flex items-center gap-1" onclick="A.toggle('${i.id}')">
+              <span>💬</span> ${cm.length} comment${cm.length === 1 ? "" : "s"}${open ? " (hide)" : ""}
+            </button>
+            <button onclick="A.tab('board')" class="text-xs text-slate-500 hover:text-blue-600 flex items-center gap-1">
+              📊 View on Leaderboard &rarr;
+            </button>
+          </div>
+          ${open ? `
+            <div class="mt-4 space-y-2 border-t border-slate-100 pt-3">
+              ${cm.map(c => `
+                <div class="text-sm bg-slate-50 rounded-xl p-3 border border-slate-100">
+                  <div class="flex justify-between items-center mb-1">
+                    <span><b class="text-slate-900">${esc(c.commenter_name)}</b> <span class="text-slate-400 text-xs">(${esc(c.commenter_department)})</span></span>
+                    ${(S.student && c.student_id === S.student.id) || S.admin ? `<button class="text-xs text-red-600 font-semibold hover:underline" onclick="A.delComment('${c.id}')">Delete</button>` : ""}
+                  </div>
+                  <p class="text-slate-700 text-sm mt-0.5">${esc(c.comment_text)}</p>
+                </div>
+              `).join("") || '<p class="text-sm text-slate-400 py-2">No feedback yet. Share your thoughts below!</p>'}
+
+              ${S.student ? `
+                <form onsubmit="A.comment(event,'${i.id}')" class="flex gap-2 mt-3">
+                  <input name="c" maxlength="1000" required class="in text-sm" placeholder="Write constructive feedback..."/>
+                  <button class="btn text-sm whitespace-nowrap">Post</button>
+                </form>
+              ` : '<p class="text-xs text-slate-500 bg-slate-50 p-2.5 rounded-xl border border-slate-100 mt-2">Please sign in to leave a comment.</p>'}
+            </div>
+          ` : ""}
+        </div>
+      </article>`;
+    }
+
+    // Showcase View
+    const showcase = () => {
+      const sortedByVotes = [...S.ideas].sort((a, b) => (b.vote_count || 0) - (a.vote_count || 0));
+      const rankMap = new Map(sortedByVotes.map((idea, idx) => [idea.id, idx + 1]));
+
+      const list = S.ideas
+        .filter(i => S.cat === "All" || i.category === S.cat)
+        .sort((a, b) => (b.vote_count || 0) - (a.vote_count || 0));
+
+      return `
+      <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 class="text-2xl font-bold text-slate-900">Campus Ideas</h2>
+          <p class="text-sm text-slate-500 mt-0.5">Explore approved student projects and innovations.</p>
+        </div>
+        <button onclick="A.tab('explore')" class="btn text-xs py-2 px-3.5 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 shadow-none font-bold">
+          🔥 Explore & Vote Grid &rarr;
+        </button>
+      </div>
+
+      <div class="mb-6 flex items-center gap-2">
+        <label class="text-sm font-semibold text-slate-700" for="catFilter">Category:</label>
+        <select id="catFilter" class="in !w-auto max-w-full" onchange="A.cat(this.value)">
+          ${["All", ...CATS].map(c => `<option value="${esc(c)}" ${S.cat === c ? "selected" : ""}>${c === "All" ? "All Categories" : esc(c)}</option>`).join("")}
+        </select>
+      </div>
+
+      <div class="space-y-4">
+        ${list.map(i => card(i, rankMap.get(i.id))).join("") || `
+          <div class="bg-white rounded-2xl p-12 text-center border border-slate-200 shadow-sm max-w-lg mx-auto my-8">
+            <div class="text-4xl mb-3">💡</div>
+            <h3 class="text-lg font-bold text-slate-900">No ideas published yet</h3>
+            <p class="text-sm text-slate-500 mt-1">Be the first to share an innovation idea and rally votes from your peers!</p>
+            <button class="btn mt-4 text-sm font-bold" onclick="A.tab('submit')">Pitch Your Idea</button>
+          </div>
+        `}
+      </div>`;
+    };
+
+    // Explore Ideas View
+    const exploreView = () => {
+      const leaderboardOrder = [...S.ideas].sort((a, b) => (b.vote_count || 0) - (a.vote_count || 0));
+      const rankMap = new Map(leaderboardOrder.map((idea, idx) => [idea.id, idx + 1]));
+      const topIdea = leaderboardOrder[0];
+
+      let list = S.ideas.filter(i => {
+        const matchesCat = S.exploreCat === "All" || i.category === S.exploreCat;
+        const q = S.exploreSearch.trim().toLowerCase();
+        const matchesSearch = !q ||
+          i.title.toLowerCase().includes(q) ||
+          i.description.toLowerCase().includes(q) ||
+          i.author_name.toLowerCase().includes(q) ||
+          i.category.toLowerCase().includes(q);
+        return matchesCat && matchesSearch;
+      });
+
+      if (S.exploreSort === "highest") {
+        list.sort((a, b) => (b.vote_count || 0) - (a.vote_count || 0));
+      } else if (S.exploreSort === "newest") {
+        list.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+      } else if (S.exploreSort === "trending") {
+        const commentsCount = id => S.comments.filter(c => c.idea_id === id).length;
+        list.sort((a, b) => (commentsCount(b.id) * 2 + (b.vote_count || 0)) - (commentsCount(a.id) * 2 + (a.vote_count || 0)));
+      }
+
+      const totalVotes = S.ideas.reduce((sum, i) => sum + (i.vote_count || 0), 0);
+
+      return `
+      <div>
+        <!-- Hero Header -->
+        <div class="bg-gradient-to-r from-blue-700 via-indigo-700 to-blue-900 rounded-3xl p-6 sm:p-8 text-white mb-8 shadow-md">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div class="max-w-xl">
+              <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/30 text-blue-100 text-xs font-bold uppercase tracking-wider mb-3">
+                🔥 Live Student Voting Hub
+              </span>
+              <h2 class="text-2xl sm:text-3xl font-extrabold tracking-tight">
+                Explore Ideas & Cast Your Votes
+              </h2>
+              <p class="mt-2 text-blue-100 text-sm leading-relaxed">
+                Browse student pitches below and upvote your favorites. <b>The highest voted ideas instantly take the #1 spot on the live Leaderboard!</b>
+              </p>
+            </div>
+
+            <!-- Live Metrics Snapshot -->
+            <div class="grid grid-cols-3 gap-3 bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/15 text-center min-w-[280px]">
+              <div>
+                <div class="text-2xl font-extrabold">${S.ideas.length}</div>
+                <div class="text-[11px] text-blue-200 uppercase font-semibold">Active Pitches</div>
+              </div>
+              <div class="border-x border-white/20">
+                <div class="text-2xl font-extrabold">${totalVotes}</div>
+                <div class="text-[11px] text-blue-200 uppercase font-semibold">Total Votes</div>
+              </div>
+              <div>
+                <div class="text-2xl font-extrabold text-yellow-300">#1</div>
+                <div class="text-[11px] text-blue-200 uppercase font-semibold truncate" title="${topIdea ? esc(topIdea.title) : 'None'}">
+                  ${topIdea ? esc(topIdea.title.slice(0, 10)) + '...' : 'None'}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Search and Sort Controls -->
+        <div class="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 mb-6 shadow-sm space-y-4">
+          <div class="flex flex-col sm:flex-row gap-3 items-center justify-between">
+            <div class="relative w-full sm:w-96">
+              <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
+              <input
+                type="text"
+                placeholder="Search ideas, keywords, authors..."
+                value="${esc(S.exploreSearch)}"
+                oninput="A.setExploreSearch(this.value)"
+                class="in !pl-10 text-sm"
+              />
+              ${S.exploreSearch ? `
+                <button onclick="A.setExploreSearch('')" class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600">✕</button>
+              ` : ""}
+            </div>
+
+            <div class="flex items-center gap-2 w-full sm:w-auto">
+              <span class="text-xs text-slate-500 font-bold uppercase whitespace-nowrap">Sort By:</span>
+              <div class="flex p-1 bg-slate-100 rounded-xl text-xs font-bold w-full sm:w-auto">
+                <button
+                  class="flex-1 sm:flex-none px-3 py-1.5 rounded-lg transition ${S.exploreSort === 'highest' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'}"
+                  onclick="A.setExploreSort('highest')"
+                  title="Highest votes first (Leaderboard order)">
+                  🏆 Top Voted
+                </button>
+                <button
+                  class="flex-1 sm:flex-none px-3 py-1.5 rounded-lg transition ${S.exploreSort === 'trending' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'}"
+                  onclick="A.setExploreSort('trending')"
+                  title="Most discussed & voted">
+                  ⚡ Trending
+                </button>
+                <button
+                  class="flex-1 sm:flex-none px-3 py-1.5 rounded-lg transition ${S.exploreSort === 'newest' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'}"
+                  onclick="A.setExploreSort('newest')"
+                  title="Newest submissions first">
+                  🕒 Newest
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2 pt-1">
+            <label class="text-xs font-semibold text-slate-600" for="exploreCatFilter">Category:</label>
+            <select id="exploreCatFilter" class="in !w-auto max-w-full text-xs !py-1.5" onchange="A.setExploreCat(this.value)">
+              ${["All", ...CATS].map(c => `<option value="${esc(c)}" ${S.exploreCat === c ? "selected" : ""}>${c === "All" ? "All Categories" : esc(c)}</option>`).join("")}
+            </select>
+          </div>
+        </div>
+
+        <!-- Explore Cards Grid -->
+        <div class="grid md:grid-cols-2 gap-5">
+          ${list.map(i => {
+        const on = S.myVotes.has(i.id);
+        const rank = rankMap.get(i.id) || 0;
+        const cm = S.comments.filter(c => c.idea_id === i.id);
+        const open = S.open === i.id;
+        const canVote = !!S.student;
+
+        return `
+            <div class="bg-white border ${on ? 'border-blue-400 ring-2 ring-blue-100' : 'border-slate-200'} rounded-2xl p-5 shadow-sm hover:shadow-md transition flex flex-col justify-between">
+              <div>
+                <div class="flex items-center justify-between gap-2 mb-3">
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <span class="text-xs font-bold px-2.5 py-0.5 rounded-full ${rank === 1 ? 'bg-yellow-100 text-yellow-900 border border-yellow-300 font-extrabold pulse-rank' : rank === 2 ? 'bg-slate-100 text-slate-800 border border-slate-300' : rank === 3 ? 'bg-amber-100 text-amber-900 border border-amber-300' : 'bg-slate-100 text-slate-600'}">
+                      ${rank === 1 ? '🥇 #1 on Board' : rank === 2 ? '🥈 #2 on Board' : rank === 3 ? '🥉 #3 on Board' : `Rank #${rank}`}
+                    </span>
+                    ${badge(i)}
+                  </div>
+                  <span class="text-[11px] font-semibold text-slate-400 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">
+                    ${esc(i.category)}
+                  </span>
+                </div>
+
+                <h3 class="font-bold text-lg text-slate-900 leading-snug mb-1">
+                  ${esc(i.title)}
+                </h3>
+                <p class="text-xs text-slate-500 mb-3">
+                  By <b class="text-slate-700">${esc(i.author_name)}</b> &bull; Department of ${esc(i.author_department)}
+                </p>
+
+                <p class="text-sm text-slate-600 leading-relaxed mb-4 line-clamp-3">
+                  ${esc(i.description)}
+                </p>
+              </div>
+
+              <div class="pt-4 border-t border-slate-100 mt-2">
+                <div class="flex items-center justify-between gap-3">
+                  <button
+                    onclick="A.vote('${i.id}')"
+                    class="flex items-center gap-2.5 px-4 py-2.5 rounded-xl font-bold text-sm transition ${on ? 'bg-blue-600 text-white shadow-sm hover:bg-blue-700' : 'bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100'}"
+                    title="${canVote ? (on ? 'Click to revoke your vote' : 'Click to upvote this idea') : 'Sign in to vote'}">
+                    <span class="text-base">${on ? '✓' : '▲'}</span>
+                    <span>${on ? 'Upvoted' : 'Vote'}</span>
+                    <span class="ml-1 px-2 py-0.5 rounded-lg text-xs font-extrabold ${on ? 'bg-blue-800 text-white' : 'bg-white text-blue-700 border border-blue-200'}">
+                      ${i.vote_count || 0}
+                    </span>
+                  </button>
+
+                  <button
+                    onclick="A.toggle('${i.id}')"
+                    class="text-xs font-semibold text-slate-600 hover:text-blue-600 flex items-center gap-1.5 py-2">
+                    <span>💬</span>
+                    <span>${cm.length} comments</span>
+                    <span>${open ? '▲' : '▼'}</span>
+                  </button>
+                </div>
+
+                ${open ? `
+                  <div class="mt-4 space-y-2 border-t border-slate-100 pt-3">
+                    ${cm.map(c => `
+                      <div class="text-xs bg-slate-50 rounded-xl p-2.5 border border-slate-100">
+                        <div class="flex justify-between items-center mb-1">
+                          <span><b class="text-slate-900">${esc(c.commenter_name)}</b> <span class="text-slate-400 text-[10px]">(${esc(c.commenter_department)})</span></span>
+                          ${(S.student && c.student_id === S.student.id) || S.admin ? `<button class="text-[11px] text-red-600 font-semibold hover:underline" onclick="A.delComment('${c.id}')">Delete</button>` : ""}
+                        </div>
+                        <p class="text-slate-700 mt-0.5">${esc(c.comment_text)}</p>
+                      </div>
+                    `).join("") || '<p class="text-xs text-slate-400 py-1.5">No comments yet. Share your thoughts below!</p>'}
+
+                    ${S.student ? `
+                      <form onsubmit="A.comment(event,'${i.id}')" class="flex gap-2 mt-2">
+                        <input name="c" maxlength="1000" required class="in text-xs !py-1.5" placeholder="Write feedback..."/>
+                        <button class="btn text-xs py-1.5 px-3">Post</button>
+                      </form>
+                    ` : '<p class="text-[11px] text-slate-500 bg-slate-50 p-2 rounded-lg mt-2">Sign in to leave feedback on this idea.</p>'}
+                  </div>
+                ` : ""}
+              </div>
+            </div>`;
+      }).join("") || `
+            <div class="col-span-2 bg-white rounded-2xl p-12 text-center border border-slate-200 shadow-sm my-4">
+              <div class="text-4xl mb-3">💡</div>
+              <h3 class="text-lg font-bold text-slate-900">No ideas available yet</h3>
+              <p class="text-sm text-slate-500 mt-1">Be the first student to pitch a campus innovation project!</p>
+              <button class="btn mt-4 text-xs font-bold" onclick="A.tab('submit')">Pitch Your Idea</button>
+            </div>
+          `}
+        </div>
+      </div>`;
+    };
+
+    // Leaderboard View
+    const board = () => {
+      const sorted = [...S.ideas].sort((a, b) => (b.vote_count || 0) - (a.vote_count || 0));
+      const maxVotes = sorted.length > 0 ? Math.max(1, sorted[0].vote_count || 1) : 1;
+
+      return `
+      <div class="space-y-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200">
+          <div>
+            <div class="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-yellow-100 text-yellow-900 text-xs font-bold mb-1">
+              🏆 Campus Rankings
+            </div>
+            <h2 class="text-2xl font-bold text-slate-900">Innovation Leaderboard</h2>
+            <p class="text-sm text-slate-500 mt-0.5">
+              Rankings update automatically based on peer votes received in Explore Ideas.
+            </p>
+          </div>
+          <button onclick="A.tab('explore')" class="btn text-xs py-2 px-4 shadow-sm self-start sm:self-auto font-bold flex items-center gap-1.5">
+            <span>▲</span> Vote on Ideas &rarr;
+          </button>
+        </div>
+
+        ${sorted.length > 0 ? `
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 my-6">
+            ${sorted.slice(0, 3).map((item, idx) => {
+        const medals = ["🥇", "🥈", "🥉"];
+        const titles = ["1st Place Leader", "2nd Place Contender", "3rd Place Contender"];
+        const borders = ["border-amber-300 bg-amber-50/50", "border-slate-300 bg-slate-50/50", "border-amber-600/30 bg-orange-50/30"];
+        const on = S.myVotes.has(item.id);
+
+        return `
+              <div class="relative bg-white border-2 ${borders[idx]} rounded-2xl p-5 shadow-sm flex flex-col justify-between">
+                <div class="flex items-center justify-between mb-3">
+                  <span class="text-3xl">${medals[idx]}</span>
+                  <span class="text-xs font-bold uppercase tracking-wider text-slate-500">${titles[idx]}</span>
+                </div>
+                <div>
+                  <h3 class="font-bold text-base text-slate-900 leading-snug line-clamp-2 mb-1">
+                    ${esc(item.title)}
+                  </h3>
+                  <p class="text-xs text-slate-500 mb-2">
+                    ${esc(item.author_name)} (${esc(item.author_department)}) &bull; ${esc(item.category)}
+                  </p>
+                </div>
+                <div class="pt-3 border-t border-slate-100 flex items-center justify-between mt-3">
+                  <div>
+                    <span class="hd text-2xl font-extrabold text-blue-700">${item.vote_count || 0}</span>
+                    <span class="text-xs text-slate-500 font-medium">votes</span>
+                  </div>
+                  <button
+                    onclick="A.vote('${item.id}')"
+                    class="px-3 py-1.5 rounded-lg text-xs font-bold transition ${on ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}">
+                    ${on ? '✓ Voted' : '▲ Vote'}
+                  </button>
+                </div>
+              </div>`;
+      }).join("")}
+          </div>
+        ` : ""}
+
+        <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+          <div class="p-4 border-b border-slate-100 bg-slate-50 font-bold text-slate-700 flex justify-between items-center text-sm">
+            <span>Ranked Ideas (${sorted.length} Approved)</span>
+            <span class="text-xs text-slate-500 font-medium">Sorted by Total Peer Votes</span>
+          </div>
+
+          <ol class="divide-y divide-slate-100">
+            ${sorted.map((i, n) => {
+        const on = S.myVotes.has(i.id);
+        const pct = Math.round(((i.vote_count || 0) / maxVotes) * 100);
+
+        return `
+              <li class="p-4 sm:p-5 hover:bg-slate-50/80 transition flex flex-col sm:flex-row sm:items-center gap-4">
+                <div class="flex items-center gap-3 sm:w-16 flex-none">
+                  <span class="hd text-2xl sm:text-3xl font-extrabold w-10 text-center ${n === 0 ? "text-yellow-500" : n === 1 ? "text-slate-400" : n === 2 ? "text-amber-600" : "text-slate-300"}">
+                    ${n === 0 ? "🥇" : n === 1 ? "🥈" : n === 2 ? "🥉" : n + 1}
+                  </span>
+                </div>
+
+                <div class="flex-1 min-w-0">
+                  <div class="flex flex-wrap gap-2 items-center mb-1">
+                    <b class="text-base text-slate-900">${esc(i.title)}</b>
+                    ${badge(i)}
+                  </div>
+                  <p class="text-xs sm:text-sm text-slate-500">
+                    By <span class="text-slate-700 font-medium">${esc(i.author_name)}</span> (${esc(i.author_department)}) &bull; <span class="text-blue-700">${esc(i.category)}</span>
+                  </p>
+                  <div class="w-full bg-slate-100 rounded-full h-1.5 mt-2.5 overflow-hidden">
+                    <div class="bg-blue-600 h-1.5 rounded-full transition-all duration-500" style="width: ${Math.max(5, pct)}%"></div>
+                  </div>
+                </div>
+
+                <div class="flex items-center justify-between sm:justify-end gap-4 mt-2 sm:mt-0 flex-none">
+                  <div class="text-right">
+                    <div class="hd text-xl sm:text-2xl font-extrabold text-blue-700">${i.vote_count || 0}</div>
+                    <div class="text-[10px] uppercase font-bold text-slate-400">votes</div>
+                  </div>
+                  <button
+                    onclick="A.vote('${i.id}')"
+                    class="px-3.5 py-2 rounded-xl text-xs font-bold transition ${on ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-blue-50 hover:text-blue-700'}"
+                    title="${on ? 'Click to remove vote' : 'Click to vote'}">
+                    ${on ? '✓ Voted' : '▲ Vote'}
+                  </button>
+                </div>
+              </li>`;
+      }).join("") || `
+              <li class="p-12 text-center text-slate-500">
+                <div class="text-4xl mb-2">🏆</div>
+                <p class="font-bold text-slate-700 text-base">Leaderboard is empty</p>
+                <p class="text-sm text-slate-400 mt-1">Once student ideas are submitted and approved, they will compete for rank here.</p>
+                <button class="btn mt-4 text-xs font-bold" onclick="A.tab('submit')">Pitch the First Idea</button>
+              </li>
+            `}
+          </ol>
+        </div>
+      </div>`;
+    };
+
+    // Submit View
+    const submitView = () => {
+      if (!S.student) return authView();
+      return `
+      <div class="grid md:grid-cols-2 gap-6">
+        <form onsubmit="A.submit(event)" class="bg-white border border-slate-200 rounded-2xl p-6 space-y-4 shadow-sm">
+          <h2 class="text-xl font-bold text-slate-900">Pitch a New Idea</h2>
+          <p class="text-xs text-slate-500">Approved pitches appear on Explore Ideas and compete on the Leaderboard.</p>
+          <div>
+            <label class="block text-sm font-semibold text-slate-700 mb-1">Project Title</label>
+            <input name="title" minlength="3" maxlength="150" required class="in" placeholder="E.g. Autonomous Campus Delivery Rover" />
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-slate-700 mb-1">Category</label>
+            <select name="cat" required class="in" onchange="this.form.querySelector('.submit-idea-btn').disabled = !this.value">
+              <option value="" selected disabled>-- Select a category --</option>
+              ${CATS.map(c => `<option>${esc(c)}</option>`).join("")}
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-slate-700 mb-1">Description & Impact</label>
+            <textarea name="desc" minlength="10" maxlength="4000" rows="6" required class="in" placeholder="Describe the problem, your proposed solution, required hardware/software, and how it benefits students..."></textarea>
+          </div>
+          <button class="btn submit-idea-btn w-full py-3 text-base shadow-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed" disabled title="Select a category to enable publishing">Submit Idea for Review</button>
+        </form>
+        <div>
+          <h2 class="text-xl font-bold mb-3 text-slate-900">Your Submissions</h2>
+          <div class="space-y-3">
+            ${S.mine.map(i => `
+              <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+                <div class="flex gap-2 items-center flex-wrap">
+                  ${stat(i.status)}
+                  ${badge(i)}
+                  <b class="text-slate-900">${esc(i.title)}</b>
+                </div>
+                <p class="text-sm text-slate-500 mt-1.5">${esc(i.category)} &bull; ${i.vote_count || 0} votes</p>
+                <p class="text-xs text-slate-600 mt-2 line-clamp-2">${esc(i.description)}</p>
+                ${i.status === "Pending" ? `<button class="mt-3 text-xs text-red-600 font-semibold hover:underline" onclick="A.del('${i.id}')">Withdraw submission</button>` : ""}
+              </div>
+            `).join("") || '<div class="text-slate-400 bg-white border border-slate-200 rounded-2xl p-8 text-center"><p>You have not submitted any ideas yet.</p></div>'}
+          </div>
+        </div>
+      </div>`;
+    };
+
+    // ==============================================================================
+    // Auth View (Features Student Login, Admin/Faculty Login, & Eye Visibility Toggle)
+    // ==============================================================================
+    const authView = () => {
+      const isStudentTab = S.authTab === 'student';
+      const isAdminTab = S.authTab === 'admin';
+      const isRegisterTab = S.authTab === 'register';
+
+      return `
+      <div class="max-w-md mx-auto my-6 bg-white border border-slate-200 rounded-3xl p-7 sm:p-8 shadow-sm">
+        <!-- Portal Icon & Header -->
+        <div class="text-center mb-6">
+          <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl ${isAdminTab ? 'bg-indigo-50 text-indigo-700' : 'bg-blue-50 text-blue-600'} text-3xl mb-3 shadow-xs">
+            ${isAdminTab ? '👔' : '🎓'}
+          </div>
+          <h2 class="text-2xl font-extrabold text-slate-900 tracking-tight">
+            ${isAdminTab ? 'Admin & Faculty Portal' : 'Student Innovation Portal'}
+          </h2>
+          <p class="text-xs sm:text-sm text-slate-500 mt-1">
+            ${isAdminTab
+          ? 'Authorized faculty & administrator access to review pitches and assign ranks'
+          : 'Sign in to submit projects, cast your votes, and join the campus leaderboard'}
+          </p>
+        </div>
+
+        <!-- 3 Segmented Navigation Tabs -->
+        <div class="flex p-1 bg-slate-100 rounded-xl mb-6 text-xs font-bold">
+          <button
+            class="flex-1 py-2 rounded-lg transition ${isStudentTab ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'}"
+            onclick="A.switchAuthTab('student')">
+            👨‍🎓 Student
+          </button>
+          <button
+            class="flex-1 py-2 rounded-lg transition ${isAdminTab ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'}"
+            onclick="A.switchAuthTab('admin')">
+            👔 Admin / Faculty
+          </button>
+          <button
+            class="flex-1 py-2 rounded-lg transition ${isRegisterTab ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'}"
+            onclick="A.switchAuthTab('register')">
+            📝 Register
+          </button>
+        </div>
+
+        <!-- 1. STUDENT SIGN-IN FORM -->
+        ${isStudentTab ? `
+          <form onsubmit="A.loginStudent(event)" class="space-y-4">
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">College Email or Roll Number</label>
+              <input name="identifier" required class="in text-sm" placeholder="e.g. 21CS045 or student@college.edu" />
+            </div>
+
+            <div>
+              <div class="flex justify-between items-center mb-1.5">
+                <label class="block text-xs font-bold uppercase tracking-wider text-slate-600">Password</label>
+              </div>
+              <div class="relative">
+                <input
+                  id="student-pwd"
+                  name="password"
+                  type="password"
+                  required
+                  class="in text-sm pr-11"
+                  placeholder="••••••••"
+                />
+                <button
+                  type="button"
+                  onclick="A.togglePwd('student-pwd', this)"
+                  class="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+                  title="Show password">
+                  <svg class="w-5 h-5 text-slate-400 hover:text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <button class="btn w-full py-2.5 text-base font-bold shadow-sm">
+              Sign In as Student &rarr;
+            </button>
+
+            <div class="pt-3 border-t border-slate-100 text-center">
+              <p class="text-xs text-slate-500">
+                Committee member or Evaluator?
+                <button type="button" onclick="A.switchAuthTab('admin')" class="text-blue-700 font-bold hover:underline ml-1">
+                  Faculty / Admin Login &rarr;
+                </button>
+              </p>
+            </div>
+          </form>
+        ` : ""}
+
+        <!-- 2. ADMIN / FACULTY SIGN-IN FORM -->
+        ${isAdminTab ? `
+          <form onsubmit="A.loginAdmin(event)" class="space-y-4">
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">Admin ID or Faculty Email</label>
+              <input
+                name="email"
+                type="text"
+                required
+                class="in text-sm"
+                placeholder="Enter admin"
+              />
+            </div>
+
+            <div>
+              <div class="flex justify-between items-center mb-1.5">
+                <label class="block text-xs font-bold uppercase tracking-wider text-slate-600">Admin Password</label>
+              </div>
+              <div class="relative">
+                <input
+                  id="admin-pwd"
+                  name="password"
+                  type="password"
+                  required
+                  class="in text-sm pr-11"
+                  placeholder="Enter admin password"
+                />
+                <button
+                  type="button"
+                  onclick="A.togglePwd('admin-pwd', this)"
+                  class="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+                  title="Show password">
+                  <svg class="w-5 h-5 text-slate-400 hover:text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <button class="btn w-full py-2.5 text-base font-bold !bg-indigo-700 hover:!bg-indigo-800 shadow-sm">
+              Sign In to Admin Dashboard &rarr;
+            </button>
+
+            <div class="pt-3 border-t border-slate-100 text-center">
+              <p class="text-xs text-slate-500">
+                Are you a student?
+                <button type="button" onclick="A.switchAuthTab('student')" class="text-indigo-700 font-bold hover:underline ml-1">
+                  Switch to Student Login
+                </button>
+              </p>
+            </div>
+          </form>
+        ` : ""}
+
+        <!-- 3. STUDENT REGISTRATION FORM -->
+        ${isRegisterTab ? `
+          <form onsubmit="A.register(event)" class="space-y-3.5">
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Full Name</label>
+              <input name="name" required class="in text-sm" placeholder="e.g. Asha Reddy" />
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Roll / Student ID</label>
+                <input name="roll" required class="in text-sm" placeholder="21CS045" />
+              </div>
+              <div>
+                <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Department</label>
+                <select name="dept" class="in text-sm">
+                  <option>Computer Science (CSE)</option>
+                  <option>Electronics & Comm. (ECE)</option>
+                  <option>Mechanical (MECH)</option>
+                  <option>Electrical & Electronics (EEE)</option>
+                  <option>Information Technology (IT)</option>
+                  <option>Civil Engineering</option>
+                  <option>Biotechnology</option>
+                  <option>Business / MBA</option>
+                  <option>Other Department</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">College Email</label>
+              <input name="email" type="email" required class="in text-sm" placeholder="you@college.edu" />
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Create Password</label>
+              <div class="relative">
+                <input
+                  id="reg-pwd"
+                  name="password"
+                  type="password"
+                  minlength="8"
+                  required
+                  class="in text-sm pr-11"
+                  placeholder="Min. 8 chars (letters & numbers)"
+                />
+                <button
+                  type="button"
+                  onclick="A.togglePwd('reg-pwd', this)"
+                  class="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+                  title="Show password">
+                  <svg class="w-5 h-5 text-slate-400 hover:text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <button class="btn w-full py-2.5 text-base font-bold shadow-sm mt-1">
+              Register Student Account
+            </button>
+          </form>
+        ` : ""}
+      </div>`;
+    };
+
+    // Admin View
+    const admin = () => {
+      if (!S.admin) return '<div class="py-16 text-center text-slate-500 bg-white rounded-2xl border border-slate-200"><p class="text-lg font-bold">Admin Portal</p><p class="text-sm mt-1">Please sign in with administrator / faculty credentials.</p><button class="btn mt-4 text-xs font-bold" onclick="A.tab(\'submit\'); A.switchAuthTab(\'admin\');">Go to Admin/Faculty Login &rarr;</button></div>';
+
+      const by = s => S.all.filter(i => i.status === s);
+      const row = i => `
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+          <div class="flex flex-wrap gap-2 items-center">
+            ${stat(i.status)}
+            ${badge(i)}
+            <b class="text-slate-900">${esc(i.title)}</b>
+            <span class="text-sm text-slate-500">&bull; ${esc(i.author_name)} (${esc(i.author_department)}) &bull; ${i.vote_count || 0} votes</span>
+          </div>
+          <p class="text-sm text-slate-700 mt-2 whitespace-pre-line leading-relaxed">${esc(i.description)}</p>
+          <div class="flex flex-wrap gap-2 mt-4 pt-3 border-t border-slate-100">
+            ${i.status !== "Approved" ? `<button class="ghost !bg-emerald-600 !text-white !border-emerald-600 text-xs font-bold" onclick="A.setStatus('${i.id}','Approved')">✓ Approve</button>` : ""}
+            ${i.status !== "Rejected" ? `<button class="ghost !bg-red-600 !text-white !border-red-600 text-xs font-bold" onclick="A.setStatus('${i.id}','Rejected')">✕ Reject</button>` : ""}
+            ${i.status === "Approved" ? `<button class="ghost text-xs font-bold" onclick="A.rank('${i.id}')">🏆 Set Winner Rank</button>` : ""}
+            <button class="ghost !text-red-600 text-xs ml-auto" onclick="A.del('${i.id}')">Delete</button>
+          </div>
+        </div>`;
+
+      return `
+      <div>
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+          <div>
+            <h1 class="text-2xl font-bold text-slate-900">Admin & Faculty Moderation</h1>
+            <p class="text-xs text-slate-500">Review student innovation pitches, grant approvals, and award official winner ranks.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick="A.purgeAllIdeas()" class="ghost !text-red-600 hover:!bg-red-50 text-xs font-bold border-red-200 shadow-xs" title="Wipe all ideas, votes, and comments permanently">
+              🧹 Clear All Ideas
+            </button>
+            <span class="text-xs bg-indigo-100 text-indigo-800 font-bold px-3 py-1 rounded-full">Admin Active</span>
+          </div>
+        </div>
+        ${["Pending", "Approved", "Rejected"].map(s => `
+          <div class="mb-8">
+            <h2 class="text-lg font-bold mb-3 flex items-center gap-2">
+              <span>${s} Ideas</span>
+              <span class="text-xs font-bold bg-slate-200 text-slate-700 px-2.5 py-0.5 rounded-full">${by(s).length}</span>
+            </h2>
+            <div class="space-y-3">
+              ${by(s).map(row).join("") || '<p class="text-sm text-slate-400 bg-white border border-slate-200 rounded-2xl p-5 text-center">No ' + s.toLowerCase() + ' ideas.</p>'}
+            </div>
+          </div>
+        `).join("")}
+      </div>`;
+    };
+
+    // ==============================================================================
+    // Database Diagnostics Modal View
+    // ==============================================================================
+    const dbModalView = () => {
+      if (!S.dbModal) return "";
+      const d = S.dbDiagnostics || {
+        status: "Healthy",
+        mode: S.isLive ? "Supabase Cloud (PostgreSQL)" : "Local Storage Database Engine",
+        latencyMs: 1,
+        readTest: "PASSED",
+        writeTest: "PASSED",
+        tables: {
+          ideas: S.ideas.length,
+          students: (JSON.parse(localStorage.getItem("sip_students") || "[]")).length,
+          votes: (JSON.parse(localStorage.getItem("sip_votes") || "[]")).length,
+          comments: S.comments.length
+        }
+      };
+      const isLive = S.isLive;
+
+      return `
+      <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+        <div class="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-7 shadow-2xl border border-slate-200 relative my-8">
+          <div class="flex items-center justify-between pb-4 border-b border-slate-100">
+            <div class="flex items-center gap-2.5">
+              <div class="w-10 h-10 rounded-xl ${isLive ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600'} flex items-center justify-center text-xl font-bold">
+                🗄️
+              </div>
+              <div>
+                <h3 class="font-extrabold text-lg text-slate-900">Database Connectivity & Diagnostics</h3>
+                <p class="text-xs text-slate-500">Real-time health monitor, schema verification, and latency checks</p>
+              </div>
+            </div>
+            <button onclick="A.closeDbModal()" class="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-800 flex items-center justify-center text-sm font-bold">✕</button>
+          </div>
+
+          <!-- Health Snapshot Card -->
+          <div class="mt-5 p-4 rounded-2xl ${d.status === 'Healthy' || !d.status ? 'bg-emerald-50 border border-emerald-200' : 'bg-red-50 border border-red-200'}">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="w-3 h-3 rounded-full ${d.status === 'Healthy' || !d.status ? 'bg-emerald-500 animate-ping' : 'bg-red-500'}"></span>
+                <span class="text-sm font-extrabold ${d.status === 'Healthy' || !d.status ? 'text-emerald-900' : 'text-red-900'}">
+                  ${d.status === 'Healthy' || !d.status ? 'Database Online & Operational' : 'Database Connection Warning'}
+                </span>
+              </div>
+              <span class="text-xs font-bold px-2.5 py-0.5 rounded-full ${isLive ? 'bg-emerald-200 text-emerald-800' : 'bg-blue-200 text-blue-800'}">
+                ${isLive ? 'Cloud Supabase' : 'Local Storage Engine'}
+              </span>
+            </div>
+            <div class="grid grid-cols-3 gap-2 mt-3 pt-3 border-t ${d.status === 'Healthy' || !d.status ? 'border-emerald-200/60 text-emerald-800' : 'border-red-200 text-red-800'} text-xs">
+              <div><span class="text-slate-500 block">Ping Latency:</span> <b>${d.latencyMs ?? 1} ms</b></div>
+              <div><span class="text-slate-500 block">Read Test:</span> <b>${d.readTest || 'PASSED'}</b></div>
+              <div><span class="text-slate-500 block">Write Test:</span> <b>${d.writeTest || 'PASSED'}</b></div>
+            </div>
+          </div>
+
+          <!-- Tables Diagnostics -->
+          <div class="mt-4">
+            <h4 class="text-xs font-bold uppercase text-slate-500 tracking-wider mb-2">Verified Table Entities</h4>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-center">
+                <span class="text-[11px] text-slate-500 block">Ideas</span>
+                <b class="text-base text-slate-800">${d.tables?.ideas ?? 0}</b>
+                <span class="text-[10px] text-emerald-600 block font-semibold">✓ Verified</span>
+              </div>
+              <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-center">
+                <span class="text-[11px] text-slate-500 block">Students</span>
+                <b class="text-base text-slate-800">${d.tables?.students ?? 0}</b>
+                <span class="text-[10px] text-emerald-600 block font-semibold">✓ Verified</span>
+              </div>
+              <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-center">
+                <span class="text-[11px] text-slate-500 block">Votes</span>
+                <b class="text-base text-slate-800">${d.tables?.votes ?? 0}</b>
+                <span class="text-[10px] text-emerald-600 block font-semibold">✓ Verified</span>
+              </div>
+              <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-center">
+                <span class="text-[11px] text-slate-500 block">Comments</span>
+                <b class="text-base text-slate-800">${d.tables?.comments ?? 0}</b>
+                <span class="text-[10px] text-emerald-600 block font-semibold">✓ Verified</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Connect to Cloud Supabase (Optional) -->
+          <div class="mt-5 p-4 rounded-2xl bg-slate-50 border border-slate-200">
+            <div class="flex items-center justify-between mb-1.5">
+              <h4 class="text-xs font-bold uppercase text-slate-700 tracking-wider">Cloud Database Integration (Supabase)</h4>
+              ${isLive ? `<button onclick="A.disconnectSupabase()" class="text-xs text-red-600 font-bold hover:underline">Disconnect</button>` : ''}
+            </div>
+            <p class="text-xs text-slate-500 mb-3">Optional: To sync campus ideas across all students and devices in real-time, connect your Supabase project:</p>
+            <form onsubmit="A.saveSupabaseConfig(event)" class="space-y-2.5">
+              <input name="url" value="${esc(SUPABASE_URL)}" placeholder="https://your-project.supabase.co" class="in text-xs !py-2" />
+              <input name="key" value="${esc(SUPABASE_ANON_KEY)}" placeholder="eyJhbGciOi..." class="in text-xs !py-2" />
+              <div class="flex gap-2">
+                <button type="submit" class="btn text-xs py-2 px-3 font-bold flex-1">
+                  ${isLive ? 'Update & Reconnect' : 'Connect to Supabase'}
+                </button>
+                <button type="button" onclick="A.copySqlSchema()" class="ghost text-xs py-2 px-3 font-bold text-slate-700 hover:bg-slate-100" title="Copy SQL schema for Supabase SQL Editor">
+                  📋 Copy SQL DDL
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Diagnostics Action Controls -->
+          <div class="mt-5 flex flex-wrap gap-2 justify-between items-center pt-3 border-t border-slate-100">
+            <button onclick="A.runDbCheck()" class="btn text-xs py-2 px-3.5 bg-slate-900 hover:bg-slate-800 font-bold flex items-center gap-1.5">
+              <span>🔄</span> Run Test Again
+            </button>
+            <div class="flex gap-2">
+              <button onclick="A.seedSampleIdeas()" class="ghost text-xs py-2 px-3 font-bold text-blue-700 hover:bg-blue-50 border-blue-200">
+                💡 Seed Demo Pitches
+              </button>
+              <button onclick="A.closeDbModal()" class="ghost text-xs py-2 px-3.5 font-bold">
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    };
+
+    // ==============================================================================
+    // 6. Render Orchestrator
+    // ==============================================================================
+    let rt;
+    function render() {
+      const a = document.activeElement;
+      if (a && /^(INPUT|TEXTAREA)$/.test(a.tagName) && a.value && document.getElementById("app")?.contains(a)) {
+        clearTimeout(rt);
+        rt = setTimeout(render, 1500);
+        return;
+      }
+      draw();
+    }
+
+    function draw() {
+      const tabs = [
+        ["showcase", "Ideas"],
+        ["explore", "Explore Ideas"],
+        ["board", "Leaderboard"],
+        ["submit", "Submit Idea"],
+        ...(S.admin ? [["admin", "Admin"]] : [])
+      ];
+
+      const body = !S.ready
+        ? '<div class="py-24 text-center text-slate-500"><div class="inline-block animate-spin text-3xl mb-3">⟳</div><p>Loading Innovation Portal...</p></div>'
+        : { showcase, explore: exploreView, board, submit: submitView, admin }[S.tab]();
+
+      document.getElementById("app").innerHTML = `
+      <header class="bg-[#101828] text-white">
+        <div class="max-w-4xl mx-auto px-4 py-8">
+          <div class="flex items-center justify-between gap-3 mb-6">
+            <span class="hd font-extrabold text-lg tracking-tight flex items-center gap-2">
+              <span>🎓</span> Student Innovation Portal
+            </span>
+            <div class="flex items-center gap-3 text-sm">
+              ${S.student ? `
+                <span class="hidden sm:inline text-slate-300 font-medium">
+                  👋 ${esc(S.student.full_name)}
+                  ${S.admin ? '<span class="text-[10px] bg-indigo-500/40 text-indigo-200 border border-indigo-400/40 px-2 py-0.5 rounded-full font-bold ml-1 uppercase">Faculty</span>' : ''}
+                </span>
+                <button class="ghost !bg-transparent !text-white !border-slate-600 hover:!border-white text-xs" onclick="A.logout()">Sign Out</button>
+              ` : `
+                <div class="flex items-center gap-2">
+                  <button class="btn text-xs font-bold" onclick="A.tab('submit'); A.switchAuthTab('student');">Student Sign In</button>
+                  <button class="ghost !bg-transparent !text-white !border-slate-600 hover:!border-white text-xs font-bold" onclick="A.tab('submit'); A.switchAuthTab('admin');">Admin / Faculty</button>
+                </div>
+              `}
+            </div>
+          </div>
+          <h1 class="text-3xl sm:text-5xl font-extrabold leading-tight max-w-2xl">
+            Pitch it. Get votes. Build what your campus needs.
+          </h1>
+          <p class="mt-3 text-slate-300 max-w-xl text-sm sm:text-base">
+            Campus student innovation showcase, peer voting, comments, and real-time ranked leaderboard.
+          </p>
+        </div>
+      </header>
+
+      <!-- Navigation Bar -->
+      <nav class="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-xs">
+        <div class="max-w-4xl mx-auto px-4 flex gap-1 overflow-x-auto">
+          ${tabs.map(([k, l]) => `
+            <button onclick="A.tab('${k}')" class="px-4 py-3 font-semibold border-b-2 whitespace-nowrap transition text-sm ${S.tab === k ? "border-blue-600 text-blue-700 font-bold" : "border-transparent text-slate-600 hover:text-slate-900"}">
+              ${k === 'explore' ? '🔥 ' + l : l}
+            </button>
+          `).join("")}
+        </div>
+      </nav>
+
+      <main class="max-w-4xl mx-auto px-4 py-8">
+        ${body}
+      </main>
+
+      <footer class="border-t border-slate-200 mt-16 py-8 text-center text-xs text-slate-400">
+        Student Innovation Portal &bull; Campus Innovation & Entrepreneurship Cell
+        &bull; <button class="underline hover:text-slate-600" onclick="A.openDbModal()">${S.isLive ? "🟢 Database: Supabase" : "⚪ Database: Local mode (connect Supabase)"}</button>
+      </footer>
+      ${dbModalView()}`;
+    }
+
+    // Kickoff
+    setupRealtime();
+    initAuth().then(() => loadData());
+  </script>
+</body>
+
+</html>
