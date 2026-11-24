@@ -676,6 +676,12 @@ ALTER TABLE public.ideas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.votes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY;
 
+-- Table privileges for the Data API roles. Row Level Security policies below still decide
+-- which rows each person can actually see or change.
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT SELECT ON public.students, public.ideas, public.votes, public.comments TO anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.students, public.ideas, public.votes, public.comments TO authenticated;
+
 -- Remove old permissive policies if this script is re-run.
 DROP POLICY IF EXISTS "Public Read Students" ON public.students;
 DROP POLICY IF EXISTS "Public All Students" ON public.students;
@@ -683,6 +689,21 @@ DROP POLICY IF EXISTS "Public Read Ideas" ON public.ideas;
 DROP POLICY IF EXISTS "Public All Ideas" ON public.ideas;
 DROP POLICY IF EXISTS "Public All Votes" ON public.votes;
 DROP POLICY IF EXISTS "Public All Comments" ON public.comments;
+
+-- Remove this portal's own policies too, so the script can be re-run safely.
+DROP POLICY IF EXISTS "Students read own profile or admin reads all" ON public.students;
+DROP POLICY IF EXISTS "Students create own profile" ON public.students;
+DROP POLICY IF EXISTS "Students update own profile or admin" ON public.students;
+DROP POLICY IF EXISTS "Read approved ideas or own ideas or admin" ON public.ideas;
+DROP POLICY IF EXISTS "Authenticated students submit ideas" ON public.ideas;
+DROP POLICY IF EXISTS "Owner withdraws pending idea or admin manages" ON public.ideas;
+DROP POLICY IF EXISTS "Admin updates ideas" ON public.ideas;
+DROP POLICY IF EXISTS "Read votes" ON public.votes;
+DROP POLICY IF EXISTS "Students insert own votes" ON public.votes;
+DROP POLICY IF EXISTS "Students delete own votes or admin" ON public.votes;
+DROP POLICY IF EXISTS "Read comments" ON public.comments;
+DROP POLICY IF EXISTS "Insert own comments" ON public.comments;
+DROP POLICY IF EXISTS "Delete own comments or admin" ON public.comments;
 
 -- Admin identity must be assigned in auth.users.app_metadata by a trusted
 -- Supabase administrator/service-role process, never from client user metadata.
@@ -774,9 +795,58 @@ USING (
   OR EXISTS (SELECT 1 FROM public.students s WHERE s.id::text = comments.student_id AND s.auth_id = auth.uid())
 );
 
-ALTER PUBLICATION supabase_realtime ADD TABLE public.ideas;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.votes;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.comments;`;
+-- Lets the login form turn a roll number into the registered email (password is still checked by Supabase Auth).
+CREATE OR REPLACE FUNCTION public.email_for_roll(p_roll text)
+RETURNS text
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT email FROM public.students WHERE lower(roll_number) = lower(trim(p_roll)) LIMIT 1;
+$$;
+REVOKE ALL ON FUNCTION public.email_for_roll(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.email_for_roll(text) TO anon, authenticated;
+
+-- Keeps ideas.vote_count in sync with the votes table (students cannot update ideas directly).
+CREATE OR REPLACE FUNCTION public.sync_idea_vote_count()
+RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    UPDATE public.ideas
+    SET vote_count = (SELECT count(*) FROM public.votes WHERE idea_id = NEW.idea_id)
+    WHERE id = NEW.idea_id;
+  ELSIF TG_OP = 'DELETE' THEN
+    UPDATE public.ideas
+    SET vote_count = (SELECT count(*) FROM public.votes WHERE idea_id = OLD.idea_id)
+    WHERE id = OLD.idea_id;
+  END IF;
+  RETURN NULL;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS votes_sync_count ON public.votes;
+CREATE TRIGGER votes_sync_count
+AFTER INSERT OR DELETE ON public.votes
+FOR EACH ROW EXECUTE FUNCTION public.sync_idea_vote_count();
+
+-- Fix counts for votes that already exist.
+UPDATE public.ideas i
+SET vote_count = (SELECT count(*) FROM public.votes v WHERE v.idea_id = i.id);
+
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['ideas','votes','comments'] LOOP
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_publication_tables
+      WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = t
+    ) THEN
+      EXECUTE format('ALTER PUBLICATION supabase_realtime ADD TABLE public.%I', t);
+    END IF;
+  END LOOP;
+END $$;`;
         if (navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(sql).then(() => {
             toast("Supabase SQL setup script copied to clipboard!");
@@ -816,21 +886,33 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.comments;`;
 
         await run(async () => {
           if (supabase) {
-            const { data, error } = await supabase.auth.signInWithPassword({ email: identifier, password });
-            if (!error && data?.user) {
-              resetRateLimit();
-              S.user = data.user;
-              const { data: prof } = await supabase.from('students').select('*').eq('email', identifier).maybeSingle();
-              S.student = prof || { id: data.user.id, full_name: data.user.email.split("@")[0], email: data.user.email, department: "General", roll_number: "N/A" };
-              S.admin = isTrustedAdmin(data.user);
-              const session = { user_id: S.student.id, role: S.admin ? "admin" : "student", expires_at: Date.now() + (8 * 3600 * 1000) };
-              localStorage.setItem("sip_session", JSON.stringify(session));
-              localStorage.setItem("sip_current_student", JSON.stringify(S.student));
-              toast("Welcome back, " + (S.student.full_name || "Student") + "!");
-              S.tab = "explore";
-              loadData();
-              return;
+            // Roll numbers are resolved to the registered email, then Supabase Auth checks the password.
+            let loginEmail = identifier;
+            if (!identifier.includes("@")) {
+              const { data: foundEmail } = await supabase.rpc('email_for_roll', { p_roll: identifier });
+              if (!foundEmail) {
+                recordFailedAttempt();
+                throw new Error("No student found with that roll number. Try your email instead.");
+              }
+              loginEmail = foundEmail;
             }
+            const { data, error } = await supabase.auth.signInWithPassword({ email: loginEmail, password });
+            if (error || !data?.user) {
+              recordFailedAttempt();
+              throw new Error("Invalid roll number/email or password.");
+            }
+            resetRateLimit();
+            S.user = data.user;
+            const { data: prof } = await supabase.from('students').select('*').eq('email', loginEmail).maybeSingle();
+            S.student = prof || { id: data.user.id, full_name: data.user.email.split("@")[0], email: data.user.email, department: "General", roll_number: "N/A" };
+            S.admin = isTrustedAdmin(data.user);
+            const session = { user_id: S.student.id, role: S.admin ? "admin" : "student", expires_at: Date.now() + (8 * 3600 * 1000) };
+            localStorage.setItem("sip_session", JSON.stringify(session));
+            localStorage.setItem("sip_current_student", JSON.stringify(S.student));
+            toast("Welcome back, " + (S.student.full_name || "Student") + "!");
+            S.tab = "explore";
+            loadData();
+            return;
           }
 
           // Secure local student lookup & verification
@@ -1016,6 +1098,8 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.comments;`;
 
         await run(async () => {
           if (supabase) {
+            const { data: sess } = await supabase.auth.getSession();
+            if (!sess?.session) throw new Error("You are not signed in to the cloud database (you may be signed in locally). Please sign out, then register or sign in again.");
             const { error } = await supabase.from('ideas').insert({
               student_id: S.student.id,
               author_name: S.student.full_name,
@@ -1083,17 +1167,19 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.comments;`;
         render();
 
         if (supabase) {
+          let vErr = null;
           if (had) {
-            await supabase.from('votes').delete().match({ idea_id: id, student_id: S.student.id });
+            ({ error: vErr } = await supabase.from('votes').delete().match({ idea_id: id, student_id: S.student.id }));
           } else {
-            await supabase.from('votes').insert({
+            ({ error: vErr } = await supabase.from('votes').insert({
               idea_id: id,
               student_id: S.student.id,
               voter_name: S.student.full_name,
               voter_roll: S.student.roll_number
-            });
+            }));
           }
           loadData();
+          if (vErr) throw vErr;
         } else {
           let localVotes = [];
           try { localVotes = JSON.parse(localStorage.getItem("sip_votes")) || []; } catch (e) { }
